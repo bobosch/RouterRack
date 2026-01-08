@@ -21,6 +21,8 @@ dia = 17;
 screw_size = 4; // [3:6]
 // Connector (split) screw length
 screw_length = 10;
+// Strut height
+strut_height = 9;
 
 /* [Hidden] */
 
@@ -101,6 +103,10 @@ module front(mod) {
         square([mod_width(mod), height()]);
         translate([0, wall]) mods(mod, "front");
     }
+    if (mod != "mount") {
+        // Strut
+        translate([0, 0, height()-wall]) cube([mod_width(mod), strut_height, wall]);
+    }
 }
 
 module bottom(mod) {
@@ -128,7 +134,7 @@ module side_wall(connector = false) {
 }
 
 module side_shape(type) {
-    p = [[-wall, 0], [-wall, height()], [0, height()], [depth, wall], [depth, 0]];
+    p = [[-wall, 0], [-wall, height()], [strut_height, height()], [depth, wall], [depth, 0]];
 
     difference() {
         polygon(points = p, paths= [[0, 1, 2, 3, 4]]);
@@ -205,6 +211,8 @@ module side(part) {
 // Space with no bottom
 function space_info() = [0, sp_width ? sp_width : 0];
 module space(part) {
+    // Strut
+    cube([sp_width, strut_height, wall]);
 }
 
 // Spare with empty bottom
