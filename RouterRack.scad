@@ -12,7 +12,7 @@ rack_width = 19; // [10,19]
 */
 mods = ["side", model, rack_width == 10 ? "side" : "split", "space"]; // [side, space, spare, split, FB6590, FB7590]
 // Thickness of all walls
-wall = 3.0; // 0.1
+wall = 3.0; // [0.5:0.1:5]
 // Depth of rack mount
 depth = 150;
 // Diameter of the bottom holes
@@ -138,9 +138,9 @@ module side_shape(type) {
 
     difference() {
         polygon(points = p, paths= [[0, 1, 2, 3, 4]]);
-        translate([8, 8+wall]) side_hole(type);
-        translate([depth/2 + height()/2 - 4, 8+wall]) side_hole(type);
-        if (HU > 1) translate([8, height() - 14]) side_hole(type);
+        translate([10, 13]) side_hole(type);
+        if (depth > 50) translate([depth*(1-(16/height())) - 10, 13]) side_hole(type);
+        if (HU > 1) translate([10, height() - 13]) side_hole(type);
     }
 }
 
