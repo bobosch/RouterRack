@@ -10,11 +10,9 @@ rack_width = 19; // [10,19]
 *  - split: split the object with screw connectors
 *  e. g. ["side", "FB6590","side","FB6590","side","spare"];
 */
-mods = ["side", model, rack_width == 10 ? "side" : "split", "space"]; // [side, space, spare, split, FB6590, FB7590]
+mods = ["mount", "side", model, rack_width == 10 ? "side" : "split", "space", "side", "mount"]; // [mount, side, space, spare, split, FB6590, FB7590]
 // Thickness of all walls
 wall = 3.0; // [0.5:0.1:5]
-// Depth of rack mount
-depth = 150;
 // Diameter of the bottom holes
 dia = 17;
 // Connector (split) screw diameter
@@ -64,11 +62,14 @@ HU = get_HU();
 function get_HU(i = 0, res = 0) = i < len(mods) ? get_HU(i + 1, mod_HU(mods[i]) > res ? mod_HU(mods[i]) : res) : res;
 function height() = (HU - 1) * R_MOUNT_HEIGHT + R_PANEL_HEIGHT;
 
+depth = get_depth();
+function get_depth(i = 0, res = 0) = i < len(mods) ? get_depth(i + 1, mod_depth(mods[i]) > res ? mod_depth(mods[i]) : res) : res;
+
 sp_width = get_sp_width();
-function get_sp_width(i = 0, res = 0) = i < len(mods) ? get_sp_width(i + 1, res + mod_width(mods[i])) : R_INNER_WIDTH - res;
+function get_sp_width(i = 0, res = 0) = i < len(mods) ? get_sp_width(i + 1, res + mod_width(mods[i])) : R_OUTER_WIDTH - res;
 
 split_width = get_split_width();
-function get_split_width(i = 0, res = 0) = i < len(mods) && mods[i] != "split" ? get_split_width(i + 1, res + mod_width(mods[i])) : res + mod_width("mount") + mod_width(mods[i])/2;
+function get_split_width(i = 0, res = 0) = i < len(mods) && mods[i] != "split" ? get_split_width(i + 1, res + mod_width(mods[i])) : res + mod_width(mods[i])/2;
 
 if (split_width) {
     intersection() {
@@ -84,24 +85,28 @@ if (split_width) {
 }
 
 module rack_mount() {
-    front("mount");
-    draw_mods(0, R_MOUNT_WIDTH);
-    translate([R_OUTER_WIDTH, 0]) mirror([1,0,0]) front("mount");
+    draw_mods(0, 0);
 }
 
 module draw_mods(i = 0, x = 0) {
     echo (mods[i],info(mods[i]));
     translate([x, 0, 0]) {
-        front(mods[i]);
-        bottom(mods[i]);
+        difference() {
+            union() {
+                front(i);
+                add(i);
+            }
+            remove(i);
+        }
     }
     if (i < len(mods)-1) draw_mods(i + 1, x + mod_width(mods[i]));
 }
 
-module front(mod) {
+module front(i) {
+    mod = mods[i];
     rotate([90, 0, 0]) linear_extrude(wall) difference() {
         square([mod_width(mod), height()]);
-        translate([0, wall]) mods(mod, "front");
+        translate([0, wall]) mods(i, "front");
     }
     if (mod != "mount") {
         // Strut
@@ -109,31 +114,37 @@ module front(mod) {
     }
 }
 
-module bottom(mod) {
-    if (mod != "space") translate([mod_width(mod), 0, 0]) linear_extrude(wall) rotate([0, 0, 90]) honeycomb(depth, mod_width(mod), dia, wall, true);
+module add(i) {
+    mod = mods[i];
+    if (mod != "space" && mod != "mount") translate([mod_width(mod), 0, 0]) linear_extrude(wall) rotate([0, 0, 90]) honeycomb(mod_depth(mod), mod_width(mod), dia, wall, true);
 //    translate([mod_width(mod), 0, 0]) linear_extrude(wall) rotate([0, 0, 90]) square([depth, mod_width(mod)]);
-    mods(mod, "bottom");
+    mods(i, "add");
+}
+
+module remove(i) {
+    mod = mods[i];
+    mods(i, "remove");
 }
 
 function side_connector_width() = screw_length + M[screw_size][2];
 
-module side_wall(connector = false) {
+module side_wall(depth, connector = false) {
     length_head = M[screw_size][2];
     length_nut = M[screw_size][5];
     length_hole = screw_length-length_nut;
 
     rotate([90, 0, 90]) {
         if (connector) {
-            linear_extrude(length_head) side_shape("head");
-            translate([0, 0, length_head]) linear_extrude(length_hole) side_shape("hole");
-            translate([0, 0, length_head+length_hole]) linear_extrude(length_nut) side_shape("nut");
+            linear_extrude(length_head) side_shape(depth, "head");
+            translate([0, 0, length_head]) linear_extrude(length_hole) side_shape(depth, "hole");
+            translate([0, 0, length_head+length_hole]) linear_extrude(length_nut) side_shape(depth, "nut");
         } else {
-            linear_extrude(wall) side_shape("");
+            linear_extrude(wall) side_shape(depth);
         }
     }
 }
 
-module side_shape(type) {
+module side_shape(depth, type = "") {
     p = [[-wall, 0], [-wall, height()], [strut_height, height()], [depth, wall], [depth, 0]];
 
     difference() {
@@ -154,13 +165,14 @@ module side_hole(type) {
     }
 }
 
-module mods(mod, part) {
-    if (mod == "mount") mount(part);
-    else if (mod == "side") side(part);
+module mods(i, part) {
+    mod = mods[i];
+    if (mod == "mount") mount(i, part);
+    else if (mod == "side") side(i, part);
     else if (mod == "space") space(part);
     else if (mod == "spare") spare(part);
-    else if (mod == "split") split(part);
-    else if (mod == "FB6590") fb6590(part);
+    else if (mod == "split") split(i, part);
+    else if (mod == "FB6590") fb6590(i, part);
     else if (mod == "FB7590") fb7590(part);
 }
 
@@ -175,10 +187,11 @@ function info(mod) =
     [];
 function mod_HU(mod) = info(mod)[0];
 function mod_width(mod) = info(mod)[1];
+function mod_depth(mod) = info(mod)[2];
 
 // Mounting hole
-function mount_info() = [HU, R_MOUNT_WIDTH];
-module mount(part) {
+function mount_info() = [HU, R_MOUNT_WIDTH, 0];
+module mount(i, part) {
     module hole() {
         hull() {
             translate([-1.5,0]) circle(d=R_HOLE_DIA);
@@ -186,7 +199,7 @@ module mount(part) {
         }
     }
 
-    translate([0, -wall]) {
+    if (part == "front") translate([i > 0 ? R_MOUNT_WIDTH : 0, -wall]) mirror([i > 0 ? 1 : 0, 0, 0]) {
         // Rounded edges
         difference() {
             square([R_MOUNT_WIDTH+5, height()]);
@@ -203,41 +216,48 @@ module mount(part) {
 }
 
 // Side wall
-function side_info() = [0, wall];
-module side(part) {
-    if (part == "bottom") side_wall(false);
+function side_info(i = 0) = [0, wall, (i > 0 && i < len(mods)-1) ? mod_depth(mods[i - 1]) > mod_depth(mods[i + 1]) ? mod_depth(mods[i - 1]) : mod_depth(mods[i + 1]) : strut_height];
+module side(i, part) {
+    if (part == "add") side_wall(side_info(i)[2], false);
 }
 
 // Space with no bottom
-function space_info() = [0, sp_width ? sp_width : 0];
+function space_info() = [0, sp_width ? sp_width : 0, strut_height];
 module space(part) {
     // Strut
-    cube([sp_width, strut_height, wall]);
+    if (part == "add") cube([sp_width, strut_height, wall]);
 }
 
 // Spare with empty bottom
-function spare_info() = [0, sp_width ? sp_width : 0];
+function spare_info() = [0, mod_width("space"), depth];
 module spare(part) {
 }
 
 // Split module with screw connector
-function split_info() = [0, side_connector_width()];
-module split(part) {
-    if (part == "bottom") side_wall(true);
+function split_info(i = 0) = [0, side_connector_width(), side_info(i)[2]];
+module split(i, part) {
+    if (part == "add") side_wall(split_info(i)[2], true);
 }
 
 // FritzBox 6590
-function fb6590_info() = [2, 209];
-module fb6590(part) {
+function fb6590_info() = [2, 209, 197 + wall];
+module fb6590(i, part) {
+    support_height = 11.7;
+    stop_width = 46;
     if (part == "front") {
-        translate([10, 11.7]) square([199, 60.6]);
-    } else if (part == "bottom") {
-        translate([145, 0, 0]) cube([7, depth, 11.7 + wall]);
+        translate([10, support_height]) square([199, 60.6]);
+    } else if (part == "add") {
+        translate([145, 0, 0]) cube([7, mod_depth(mods[i]), support_height + wall]);
+        translate([0, mod_depth(mods[i]) - wall, 0]) cube([stop_width + wall, wall, support_height + wall]);
+        translate([stop_width, mod_depth(mods[i]) - 7 - wall, wall]) rotate([90, 0, 90]) linear_extrude(wall) polygon(points = [[0, 0], [7, 0], [7, support_height]], paths = [[0, 1, 2]]);
+        if (i > 0) if (mods[i - 1] == "side") translate([-wall, 0, 0]) cube([wall, mod_depth(mods[i]), support_height + wall]);
+    } else if (part == "remove") {
+        translate([0, 0, wall]) cube([stop_width, strut_height, 85.2]);
     }
 }
 
 // FritzBox 7590
-function fb7590_info() = [1, 250];
+function fb7590_info() = [1, 250, 150];
 module fb7590(part) {
     if (part == "front") {
         translate([6.5,  0]) square([237, 33]);
